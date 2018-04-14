@@ -4,6 +4,11 @@
 
 #pragma once
 
+typedef struct DSIZE
+{
+	double cx;
+	double cy;
+}DSIZE, *LPDSIZE;
 
 // CLogicalPhysicalCoordinateDisplaySampleDlg ダイアログ
 class CLogicalPhysicalCoordinateDisplaySampleDlg : public CDialogEx
@@ -23,7 +28,20 @@ public:
 
 // 実装
 private:
-	void Output(LPRECT pRect);
+	LPRECT m_lprectThis;
+	RECT m_rectThisTemp;
+	RECT m_rectDWMOffset;
+	SIZE m_sizeThis;
+	SIZE m_sizeDistance;
+	POINT m_sizeDeskOffset;
+	DSIZE m_dsizeScale;
+	void Output(LPRECT pRect, LPRECT pRectStart);
+	void CalcDWMOffset(HWND hwnd);
+	void InitMove(HWND hwnd);
+	void PreMove(HWND hwnd, LPRECT lprectThis);
+	void BeginDWMOffset(HWND hwnd, LPRECT lprectThis);
+	void EndDWMOffset(HWND hwnd, LPRECT lprectThis);
+
 protected:
 	HICON m_hIcon;
 
@@ -35,4 +53,6 @@ protected:
 public:
 	CString strEdit1;
 	afx_msg void OnMoving(UINT fwSide, LPRECT pRect);
+	afx_msg void OnNcLButtonDown(UINT nHitTest, CPoint point);
+	afx_msg void OnSizing(UINT fwSide, LPRECT pRect);
 };

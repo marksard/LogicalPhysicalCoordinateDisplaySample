@@ -35,12 +35,15 @@ private:
 	SIZE m_sizeDistance;
 	POINT m_sizeDeskOffset;
 	DSIZE m_dsizeScale;
-	void Output(LPRECT pRect, LPRECT pRectStart);
+	void LogicalToPhysicalPointForPerMonitorDPI(LPPOINT lppoint);
+	void PhysicalToLogicalPointForPerMonitorDPI(LPPOINT lppoint);
 	void CalcDWMOffset(HWND hwnd);
 	void InitMove(HWND hwnd);
 	void PreMove(HWND hwnd, LPRECT lprectThis);
+	void PreSize(HWND hwnd, LPRECT lprectThis, UINT nSide);
 	void BeginDWMOffset(HWND hwnd, LPRECT lprectThis);
 	void EndDWMOffset(HWND hwnd, LPRECT lprectThis);
+	void Output(LPRECT pRect, LPRECT pRectStart);
 
 protected:
 	HICON m_hIcon;

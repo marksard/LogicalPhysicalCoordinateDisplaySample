@@ -99,6 +99,22 @@ HCURSOR CLogicalPhysicalCoordinateDisplaySampleDlg::OnQueryDragIcon()
 }
 
 
+void CLogicalPhysicalCoordinateDisplaySampleDlg::OnNcLButtonDown(UINT nHitTest, CPoint point)
+{
+	// TODO: ここにメッセージ ハンドラー コードを追加するか、既定の処理を呼び出します。
+	HWND hwnd = this->GetSafeHwnd();
+	if (nHitTest == HTCAPTION)
+	{
+		InitMove(hwnd);
+
+		RECT rect;
+		::GetWindowRect(hwnd, &rect);
+		Output(&rect, &rect);
+	}
+
+	CDialogEx::OnNcLButtonDown(nHitTest, point);
+}
+
 
 void CLogicalPhysicalCoordinateDisplaySampleDlg::OnMoving(UINT fwSide, LPRECT pRect)
 {
@@ -115,6 +131,145 @@ void CLogicalPhysicalCoordinateDisplaySampleDlg::OnMoving(UINT fwSide, LPRECT pR
 	Output(pRect, &rectStart);
 }
 
+
+void CLogicalPhysicalCoordinateDisplaySampleDlg::OnSizing(UINT fwSide, LPRECT pRect)
+{
+	CDialogEx::OnSizing(fwSide, pRect);
+
+	// TODO: ここにメッセージ ハンドラー コードを追加します。
+	HWND hwnd = this->GetSafeHwnd();
+
+	RECT rectStart = *pRect;
+	RECT rectEnd = *pRect;
+	BeginDWMOffset(hwnd, &rectEnd);
+	PreSize(hwnd, &rectEnd, fwSide);
+	EndDWMOffset(hwnd, &rectEnd);
+
+	Output(pRect, &rectStart);
+}
+
+void CLogicalPhysicalCoordinateDisplaySampleDlg::LogicalToPhysicalPointForPerMonitorDPI(LPPOINT lppoint)
+{
+	POINT temp;
+	temp.x = (lppoint->x - m_sizeDeskOffset.x) * m_dsizeScale.cx;
+	temp.y = (lppoint->y - m_sizeDeskOffset.y) * m_dsizeScale.cy;
+	lppoint->x = temp.x + m_sizeDeskOffset.x;
+	lppoint->y = temp.y + m_sizeDeskOffset.y;
+}
+
+void CLogicalPhysicalCoordinateDisplaySampleDlg::PhysicalToLogicalPointForPerMonitorDPI(LPPOINT lppoint)
+{
+	POINT temp;
+	temp.x = (lppoint->x - m_sizeDeskOffset.x) / m_dsizeScale.cx;
+	temp.y = (lppoint->y - m_sizeDeskOffset.y) / m_dsizeScale.cy;
+	lppoint->x = temp.x + m_sizeDeskOffset.x;
+	lppoint->y = temp.y + m_sizeDeskOffset.y;
+}
+
+void CLogicalPhysicalCoordinateDisplaySampleDlg::CalcDWMOffset(HWND hwnd)
+{
+	RECT rectThis;
+	RECT rectDwm;
+	::GetWindowRect(hwnd, &rectThis);
+
+	if (IsProcessDPIAware() == FALSE)
+	{
+		RECT rectBefore = rectThis;
+		::LogicalToPhysicalPointForPerMonitorDPI(hwnd, (LPPOINT)&rectThis);
+		::LogicalToPhysicalPointForPerMonitorDPI(hwnd, (LPPOINT)&rectThis + 1);
+
+		m_dsizeScale.cx = (double)(rectThis.right - rectThis.left) / (double)(rectBefore.right - rectBefore.left);
+		m_dsizeScale.cy = (double)(rectThis.bottom - rectThis.top) / (double)(rectBefore.bottom - rectBefore.top);
+
+		HWND hwnd = this->GetSafeHwnd();
+		HMONITOR hmon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+		MONITORINFO monInfo;
+		monInfo.cbSize = sizeof(MONITORINFO);
+		GetMonitorInfo(hmon, &monInfo);
+		m_sizeDeskOffset.x = monInfo.rcMonitor.left;
+		m_sizeDeskOffset.y = monInfo.rcMonitor.top;
+	}
+
+	DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &rectDwm, sizeof(RECT));
+
+	m_rectDWMOffset.left = rectThis.left - rectDwm.left;
+	m_rectDWMOffset.top = rectThis.top - rectDwm.top;
+	m_rectDWMOffset.right = rectDwm.right - rectThis.right;
+	m_rectDWMOffset.bottom = rectDwm.bottom - rectThis.bottom;
+}
+
+void CLogicalPhysicalCoordinateDisplaySampleDlg::InitMove(HWND hwnd)
+{
+	CalcDWMOffset(hwnd);
+
+	POINT	posCursor;
+	RECT	rectThis;
+	GetCursorPos(&posCursor);
+	::LogicalToPhysicalPointForPerMonitorDPI(hwnd, &posCursor);
+	DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &rectThis, sizeof(RECT));
+
+	// サイズの計算
+	m_sizeThis.cx = rectThis.right - rectThis.left;
+	m_sizeThis.cy = rectThis.bottom - rectThis.top;
+	// ウィンドウ座標とマウス座標の距離計算
+	m_sizeDistance.cx = posCursor.x - rectThis.left;
+	m_sizeDistance.cy = posCursor.y - rectThis.top;
+}
+
+void CLogicalPhysicalCoordinateDisplaySampleDlg::PreMove(HWND hwnd, LPRECT lprectThis)
+{
+	POINT	posCursor;
+	GetCursorPos(&posCursor);
+	::LogicalToPhysicalPointForPerMonitorDPI(hwnd, &posCursor);
+	// WM_MOVINGのRectアドレスを格納
+	m_lprectThis = lprectThis;
+	// マウス座標からウィンドウ座標へ変換
+	m_rectThisTemp.left = posCursor.x - m_sizeDistance.cx;
+	m_rectThisTemp.top = posCursor.y - m_sizeDistance.cy;
+	m_rectThisTemp.right = m_rectThisTemp.left + m_sizeThis.cx;
+	m_rectThisTemp.bottom = m_rectThisTemp.top + m_sizeThis.cy;
+	// 変換したのを格納
+	*m_lprectThis = m_rectThisTemp;
+}
+
+void CLogicalPhysicalCoordinateDisplaySampleDlg::PreSize(HWND hwnd, LPRECT lprectThis, UINT nSide)
+{
+	// WM_SIZINGのRectアドレスを格納
+	m_lprectThis = lprectThis;
+	// 作業Rectに格納
+	m_rectThisTemp = *m_lprectThis;
+
+	//m_nSide = nSide;
+}
+
+void CLogicalPhysicalCoordinateDisplaySampleDlg::BeginDWMOffset(HWND hwnd, LPRECT lprectThis)
+{
+
+	if (IsProcessDPIAware() == FALSE)
+	{
+		this->LogicalToPhysicalPointForPerMonitorDPI((LPPOINT)lprectThis);
+		this->LogicalToPhysicalPointForPerMonitorDPI((LPPOINT)lprectThis + 1);
+	}
+
+	lprectThis->left -= m_rectDWMOffset.left;
+	lprectThis->top -= m_rectDWMOffset.top;
+	lprectThis->right += m_rectDWMOffset.right;
+	lprectThis->bottom += m_rectDWMOffset.bottom;
+}
+
+void CLogicalPhysicalCoordinateDisplaySampleDlg::EndDWMOffset(HWND hwnd, LPRECT lprectThis)
+{
+	lprectThis->left += m_rectDWMOffset.left;
+	lprectThis->top += m_rectDWMOffset.top;
+	lprectThis->right -= m_rectDWMOffset.right;
+	lprectThis->bottom -= m_rectDWMOffset.bottom;
+
+	if (IsProcessDPIAware() == FALSE)
+	{
+		this->PhysicalToLogicalPointForPerMonitorDPI((LPPOINT)lprectThis);
+		this->PhysicalToLogicalPointForPerMonitorDPI((LPPOINT)lprectThis + 1);
+	}
+}
 
 void CLogicalPhysicalCoordinateDisplaySampleDlg::Output(LPRECT pRect, LPRECT pRectStart)
 {
@@ -134,22 +289,22 @@ void CLogicalPhysicalCoordinateDisplaySampleDlg::Output(LPRECT pRect, LPRECT pRe
 
 	POINT curPosWithL2P;
 	GetCursorPos(&curPosWithL2P);
-	LogicalToPhysicalPointForPerMonitorDPI(hwnd, &curPosWithL2P);
+	::LogicalToPhysicalPointForPerMonitorDPI(hwnd, &curPosWithL2P);
 
 	POINT physicalCurPos;
 	GetPhysicalCursorPos(&physicalCurPos);
 
 	RECT pRectWithL2P = *pRect;
-	LogicalToPhysicalPointForPerMonitorDPI(hwnd, (LPPOINT)&pRectWithL2P);
-	LogicalToPhysicalPointForPerMonitorDPI(hwnd, (LPPOINT)&pRectWithL2P + 1);
+	::LogicalToPhysicalPointForPerMonitorDPI(hwnd, (LPPOINT)&pRectWithL2P);
+	::LogicalToPhysicalPointForPerMonitorDPI(hwnd, (LPPOINT)&pRectWithL2P + 1);
 
 	RECT dwmRect;
 	DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &dwmRect, sizeof(RECT));
 
 	RECT dwmRectWithP2L;
 	DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &dwmRectWithP2L, sizeof(RECT));
-	PhysicalToLogicalPointForPerMonitorDPI(hwnd, (LPPOINT)&dwmRectWithP2L);
-	PhysicalToLogicalPointForPerMonitorDPI(hwnd, (LPPOINT)&dwmRectWithP2L + 1);
+	::PhysicalToLogicalPointForPerMonitorDPI(hwnd, (LPPOINT)&dwmRectWithP2L);
+	::PhysicalToLogicalPointForPerMonitorDPI(hwnd, (LPPOINT)&dwmRectWithP2L + 1);
 
 	this->strEdit1 = L"";
 	CString strTemp;
@@ -186,121 +341,4 @@ void CLogicalPhysicalCoordinateDisplaySampleDlg::Output(LPRECT pRect, LPRECT pRe
 
 	GetDlgItem(IDC_EDIT1)->SetWindowTextW(this->strEdit1);
 	this->Invalidate();
-}
-
-
-void CLogicalPhysicalCoordinateDisplaySampleDlg::OnNcLButtonDown(UINT nHitTest, CPoint point)
-{
-	// TODO: ここにメッセージ ハンドラー コードを追加するか、既定の処理を呼び出します。
-	HWND hwnd = this->GetSafeHwnd();
-	if (nHitTest == HTCAPTION)
-	{
-		InitMove(hwnd);
-
-		RECT rect;
-		::GetWindowRect(hwnd, &rect);
-		Output(&rect, &rect);
-	}
-
-	CDialogEx::OnNcLButtonDown(nHitTest, point);
-}
-
-
-void CLogicalPhysicalCoordinateDisplaySampleDlg::OnSizing(UINT fwSide, LPRECT pRect)
-{
-	CDialogEx::OnSizing(fwSide, pRect);
-
-	// TODO: ここにメッセージ ハンドラー コードを追加します。
-}
-
-void CLogicalPhysicalCoordinateDisplaySampleDlg::CalcDWMOffset(HWND hwnd)
-{
-	RECT rectThis;
-	RECT rectDwm;
-	::GetWindowRect(hwnd, &rectThis);
-
-	if (IsProcessDPIAware() == FALSE)
-	{
-		RECT rectBefore = rectThis;
-		LogicalToPhysicalPointForPerMonitorDPI(hwnd, (LPPOINT)&rectThis);
-		LogicalToPhysicalPointForPerMonitorDPI(hwnd, (LPPOINT)&rectThis + 1);
-
-		m_dsizeScale.cx = (double)(rectThis.right - rectThis.left) / (double)(rectBefore.right - rectBefore.left);
-		m_dsizeScale.cy = (double)(rectThis.bottom - rectThis.top) / (double)(rectBefore.bottom - rectBefore.top);
-
-		HWND hwnd = this->GetSafeHwnd();
-		HMONITOR hmon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-		MONITORINFO monInfo;
-		monInfo.cbSize = sizeof(MONITORINFO);
-		GetMonitorInfo(hmon, &monInfo);
-		m_sizeDeskOffset.x = monInfo.rcMonitor.left;
-		m_sizeDeskOffset.y = monInfo.rcMonitor.top;
-	}
-
-	DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &rectDwm, sizeof(RECT));
-
-	m_rectDWMOffset.left = rectThis.left - rectDwm.left;
-	m_rectDWMOffset.top = rectThis.top - rectDwm.top;
-	m_rectDWMOffset.right = rectDwm.right - rectThis.right;
-	m_rectDWMOffset.bottom = rectDwm.bottom - rectThis.bottom;
-}
-
-void CLogicalPhysicalCoordinateDisplaySampleDlg::InitMove(HWND hwnd)
-{
-	CalcDWMOffset(hwnd);
-
-	POINT	posCursor;
-	RECT	rectThis;
-	GetCursorPos(&posCursor);
-	LogicalToPhysicalPointForPerMonitorDPI(hwnd, &posCursor);
-	DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &rectThis, sizeof(RECT));
-
-	// サイズの計算
-	m_sizeThis.cx = rectThis.right - rectThis.left;
-	m_sizeThis.cy = rectThis.bottom - rectThis.top;
-	// ウィンドウ座標とマウス座標の距離計算
-	m_sizeDistance.cx = posCursor.x - rectThis.left;
-	m_sizeDistance.cy = posCursor.y - rectThis.top;
-}
-
-void CLogicalPhysicalCoordinateDisplaySampleDlg::PreMove(HWND hwnd, LPRECT lprectThis)
-{
-	POINT	posCursor;
-	GetCursorPos(&posCursor);
-	LogicalToPhysicalPointForPerMonitorDPI(hwnd, &posCursor);
-	// WM_MOVINGのRectアドレスを格納
-	m_lprectThis = lprectThis;
-	// マウス座標からウィンドウ座標へ変換
-	m_rectThisTemp.left = posCursor.x - m_sizeDistance.cx;
-	m_rectThisTemp.top = posCursor.y - m_sizeDistance.cy;
-	m_rectThisTemp.right = m_rectThisTemp.left + m_sizeThis.cx;
-	m_rectThisTemp.bottom = m_rectThisTemp.top + m_sizeThis.cy;
-	// 変換したのを格納
-	*m_lprectThis = m_rectThisTemp;
-}
-
-void CLogicalPhysicalCoordinateDisplaySampleDlg::BeginDWMOffset(HWND hwnd, LPRECT lprectThis)
-{
-	lprectThis->left -= m_rectDWMOffset.left;
-	lprectThis->top -= m_rectDWMOffset.top;
-	lprectThis->right += m_rectDWMOffset.right;
-	lprectThis->bottom += m_rectDWMOffset.bottom;
-}
-
-void CLogicalPhysicalCoordinateDisplaySampleDlg::EndDWMOffset(HWND hwnd, LPRECT lprectThis)
-{
-	lprectThis->left += m_rectDWMOffset.left;
-	lprectThis->top += m_rectDWMOffset.top;
-	lprectThis->right -= m_rectDWMOffset.right;
-	lprectThis->bottom -= m_rectDWMOffset.bottom;
-
-	RECT temp;
-	temp.left = (lprectThis->left - m_sizeDeskOffset.x) / m_dsizeScale.cx;
-	temp.top = (lprectThis->top - m_sizeDeskOffset.y) / m_dsizeScale.cy;
-	temp.right = (lprectThis->right - m_sizeDeskOffset.x) / m_dsizeScale.cx;
-	temp.bottom = (lprectThis->bottom - m_sizeDeskOffset.y) / m_dsizeScale.cy;
-	lprectThis->left = temp.left + m_sizeDeskOffset.x;
-	lprectThis->top = temp.top + m_sizeDeskOffset.y;
-	lprectThis->right = temp.right + m_sizeDeskOffset.x;
-	lprectThis->bottom = temp.bottom + m_sizeDeskOffset.y;
 }

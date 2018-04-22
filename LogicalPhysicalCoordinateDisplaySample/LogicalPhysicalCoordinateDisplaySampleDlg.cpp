@@ -36,6 +36,7 @@ BEGIN_MESSAGE_MAP(CLogicalPhysicalCoordinateDisplaySampleDlg, CDialogEx)
 END_MESSAGE_MAP()
 
 const PWCHAR c_strAware = L"DPI aware";
+const PWCHAR c_strAwareM = L"DPI aware as monitor";
 const PWCHAR c_strUnaware = L"DPI unaware";
 
 // CLogicalPhysicalCoordinateDisplaySampleDlg メッセージ ハンドラー
@@ -52,7 +53,16 @@ BOOL CLogicalPhysicalCoordinateDisplaySampleDlg::OnInitDialog()
 	// TODO: 初期化をここに追加します。
 	if (IsProcessDPIAware())
 	{
-		SetWindowTextW(c_strAware);
+		PROCESS_DPI_AWARENESS dpi;
+		GetProcessDpiAwareness(GetCurrentProcess(), &dpi);
+		if (dpi == PROCESS_PER_MONITOR_DPI_AWARE)
+		{
+			SetWindowTextW(c_strAwareM);
+		}
+		else
+		{
+			SetWindowTextW(c_strAware);
+		}
 	}
 	else
 	{
@@ -186,8 +196,10 @@ void CLogicalPhysicalCoordinateDisplaySampleDlg::CalcDWMOffset(HWND hwnd)
 		MONITORINFO monInfo;
 		monInfo.cbSize = sizeof(MONITORINFO);
 		GetMonitorInfo(hmon, &monInfo);
-		m_sizeDeskOffset.x = monInfo.rcMonitor.left;
-		m_sizeDeskOffset.y = monInfo.rcMonitor.top;
+		//m_sizeDeskOffset.x = monInfo.rcMonitor.left;
+		//m_sizeDeskOffset.y = monInfo.rcMonitor.top;
+		//m_sizeDeskOffset.x = (LONG)(monInfo.rcMonitor.left * m_dsizeScale.cx);
+		//m_sizeDeskOffset.y = (LONG)(monInfo.rcMonitor.top * m_dsizeScale.cy);
 	}
 
 	DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &rectDwm, sizeof(RECT));

@@ -176,34 +176,70 @@ void CLogicalPhysicalCoordinateDisplaySampleDlg::PhysicalToLogicalPointForPerMon
 	lppoint->y = temp.y + m_sizeDeskOffset.y;
 }
 
-void CLogicalPhysicalCoordinateDisplaySampleDlg::CalcDWMOffset(HWND hwnd)
+BOOL CLogicalPhysicalCoordinateDisplaySampleDlg::IsPerMonitorDPI()
 {
-	RECT rectThis;
-	RECT rectDwm;
-	::GetWindowRect(hwnd, &rectThis);
+	PROCESS_DPI_AWARENESS dpi;
+	GetProcessDpiAwareness(NULL, &dpi);
+	return dpi == PROCESS_PER_MONITOR_DPI_AWARE;
+	//return IsProcessDPIAware();
+}
 
-	if (IsProcessDPIAware() == FALSE)
+static SIZE s_DeskDist;
+void CLogicalPhysicalCoordinateDisplaySampleDlg::GetCursorPosEx(HWND hwnd, LPPOINT lpPoint)
+{
+	GetCursorPos(lpPoint);
+	if (IsPerMonitorDPI() == FALSE)
 	{
-		RECT rectBefore = rectThis;
-		::LogicalToPhysicalPointForPerMonitorDPI(hwnd, (LPPOINT)&rectThis);
-		::LogicalToPhysicalPointForPerMonitorDPI(hwnd, (LPPOINT)&rectThis + 1);
-
-		m_dsizeScale.cx = (double)(rectThis.right - rectThis.left) / (double)(rectBefore.right - rectBefore.left);
-		m_dsizeScale.cy = (double)(rectThis.bottom - rectThis.top) / (double)(rectBefore.bottom - rectBefore.top);
-
-		HWND hwnd = this->GetSafeHwnd();
-		HMONITOR hmon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+		HMONITOR hmon = MonitorFromWindow(::GetAncestor(hwnd, GA_ROOT), MONITOR_DEFAULTTONEAREST);
 		MONITORINFO monInfo;
 		monInfo.cbSize = sizeof(MONITORINFO);
 		GetMonitorInfo(hmon, &monInfo);
-		//m_sizeDeskOffset.x = monInfo.rcMonitor.left;
-		//m_sizeDeskOffset.y = monInfo.rcMonitor.top;
-		//m_sizeDeskOffset.x = (LONG)(monInfo.rcMonitor.left * m_dsizeScale.cx);
-		//m_sizeDeskOffset.y = (LONG)(monInfo.rcMonitor.top * m_dsizeScale.cy);
+		POINT posDesk;
+		GetDesktopPosFromWindow(hwnd, &posDesk);
+		lpPoint->x = lpPoint->x - monInfo.rcMonitor.left + posDesk.x;
+		lpPoint->y = lpPoint->y - monInfo.rcMonitor.top + posDesk.y;
+		s_DeskDist.cx = posDesk.x - monInfo.rcMonitor.left;
+		s_DeskDist.cy = posDesk.y - monInfo.rcMonitor.top;
+		this->LogicalToPhysicalPointForPerMonitorDPI(lpPoint);
 	}
+}
 
+void CLogicalPhysicalCoordinateDisplaySampleDlg::GetDesktopPosFromWindow(HWND hwnd, LPPOINT lpPoint)
+{
+	// スケールからの論理・物理座標計算に必要な自分がいるモニターの左上座標を取得
+	HMONITOR hmon = MonitorFromWindow(::GetAncestor(hwnd, GA_ROOT), MONITOR_DEFAULTTONEAREST);
+	for (int nCnt = 0; nCnt < m_sEnMon.nHmonCnt; ++nCnt)
+	{
+		if (hmon == m_sEnMon.aHmon[nCnt])
+		{
+			lpPoint->x = m_sEnMon.aRects[nCnt].left;
+			lpPoint->y = m_sEnMon.aRects[nCnt].top;
+			break;
+		}
+	}
+}
+
+void CLogicalPhysicalCoordinateDisplaySampleDlg::CalcDWMOffset(HWND hwnd)
+{
+	RECT rectThis;
+	::GetWindowRect(hwnd, &rectThis);
+
+	// 物理座標に変換
+	RECT rectBefore = rectThis;
+	::LogicalToPhysicalPointForPerMonitorDPI(hwnd, (LPPOINT)&rectThis);
+	::LogicalToPhysicalPointForPerMonitorDPI(hwnd, (LPPOINT)&rectThis + 1);
+
+	// 論理・物理座標の差分からスケールを計算
+	m_dsizeScale.cx = (double)(rectThis.right - rectThis.left) / (double)(rectBefore.right - rectBefore.left);
+	m_dsizeScale.cy = (double)(rectThis.bottom - rectThis.top) / (double)(rectBefore.bottom - rectBefore.top);
+
+	// スケールからの論理・物理座標計算に必要な自分がいるモニターの左上座標を取得
+	GetDesktopPosFromWindow(hwnd, &m_sizeDeskOffset);
+
+	RECT rectDwm;
 	DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &rectDwm, sizeof(RECT));
 
+	// 物理座標同士でDWMのオフセット差分を計算
 	m_rectDWMOffset.left = rectThis.left - rectDwm.left;
 	m_rectDWMOffset.top = rectThis.top - rectDwm.top;
 	m_rectDWMOffset.right = rectDwm.right - rectThis.right;
@@ -212,12 +248,12 @@ void CLogicalPhysicalCoordinateDisplaySampleDlg::CalcDWMOffset(HWND hwnd)
 
 void CLogicalPhysicalCoordinateDisplaySampleDlg::InitMove(HWND hwnd)
 {
+	GetValue(true);
 	CalcDWMOffset(hwnd);
 
 	POINT	posCursor;
 	RECT	rectThis;
-	GetCursorPos(&posCursor);
-	::LogicalToPhysicalPointForPerMonitorDPI(hwnd, &posCursor);
+	GetCursorPosEx(hwnd, &posCursor);
 	DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &rectThis, sizeof(RECT));
 
 	// サイズの計算
@@ -231,8 +267,7 @@ void CLogicalPhysicalCoordinateDisplaySampleDlg::InitMove(HWND hwnd)
 void CLogicalPhysicalCoordinateDisplaySampleDlg::PreMove(HWND hwnd, LPRECT lprectThis)
 {
 	POINT	posCursor;
-	GetCursorPos(&posCursor);
-	::LogicalToPhysicalPointForPerMonitorDPI(hwnd, &posCursor);
+	GetCursorPosEx(hwnd, &posCursor);
 	// WM_MOVINGのRectアドレスを格納
 	m_lprectThis = lprectThis;
 	// マウス座標からウィンドウ座標へ変換
@@ -281,6 +316,63 @@ void CLogicalPhysicalCoordinateDisplaySampleDlg::EndDWMOffset(HWND hwnd, LPRECT 
 		this->PhysicalToLogicalPointForPerMonitorDPI((LPPOINT)lprectThis);
 		this->PhysicalToLogicalPointForPerMonitorDPI((LPPOINT)lprectThis + 1);
 	}
+
+	lprectThis->left -= s_DeskDist.cx;
+	lprectThis->top -= s_DeskDist.cy;
+	lprectThis->right -= s_DeskDist.cx;
+	lprectThis->bottom -= s_DeskDist.cy;
+}
+
+BOOL CALLBACK CLogicalPhysicalCoordinateDisplaySampleDlg::EnumMonitorProc(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lpsrMonitor, LPARAM lParam)
+{
+	// ウィンドウ列挙と違いフィルターを通さない分ここは簡潔だが、取得した値を使う場所はかなり多い
+
+	LPENUMHMON	lpsEnMon = (LPENUMHMON)lParam;
+	// 取得最大数なら終了
+	if (lpsEnMon->nHmonCnt >= MAX_HMON)
+	{
+		return FALSE;
+	}
+
+	MONITORINFOEX monInfo;
+	monInfo.cbSize = sizeof(MONITORINFOEX);
+	GetMonitorInfo(hMonitor, &monInfo);
+	DEVMODE devMode;
+	devMode.dmSize = sizeof(DEVMODE);
+	devMode.dmDriverExtra = sizeof(POINTL);
+	devMode.dmFields = DM_POSITION;
+	EnumDisplaySettings(monInfo.szDevice, ENUM_CURRENT_SETTINGS, &devMode);
+
+	lpsEnMon->aScales[lpsEnMon->nHmonCnt].cx = (double)devMode.dmPelsWidth / (double)(lpsrMonitor->right - lpsrMonitor->left);
+	lpsEnMon->aScales[lpsEnMon->nHmonCnt].cy = (double)devMode.dmPelsHeight / (double)(lpsrMonitor->bottom - lpsrMonitor->top);
+	lpsEnMon->aRects[lpsEnMon->nHmonCnt].left = devMode.dmPosition.x;
+	lpsEnMon->aRects[lpsEnMon->nHmonCnt].top = devMode.dmPosition.y;
+	lpsEnMon->aRects[lpsEnMon->nHmonCnt].right = devMode.dmPosition.x + devMode.dmPelsWidth;
+	lpsEnMon->aRects[lpsEnMon->nHmonCnt].bottom = devMode.dmPosition.y + devMode.dmPelsHeight;
+	GetProcessDpiAwareness(NULL, (PROCESS_DPI_AWARENESS*)&lpsEnMon->nDpiAwareness);
+	lpsEnMon->aHmon[lpsEnMon->nHmonCnt] = hMonitor;
+	++lpsEnMon->nHmonCnt;
+	return TRUE;
+}
+
+ENUMHMON CLogicalPhysicalCoordinateDisplaySampleDlg::GetValue(BOOL bRefresh)
+{
+	if (bRefresh == false)
+	{
+		return m_sEnMon;
+	}
+
+	m_sEnMon.nHmonCnt = 0;
+	EnumDisplayMonitors(NULL, NULL, EnumMonitorProc, (LPARAM)&m_sEnMon);
+	for (int nCnt = 0; nCnt < m_sEnMon.nHmonCnt; ++nCnt) {
+		//LOG_NOTE(L"[%03d] [Mon: %04d, %04d - %04d, %04d(%04d, %04d)] [DPI(%d): %03d, %03d]\r\n",
+		//	nCnt + 1, 
+		//	m_sEnMon.aRects[nCnt].left, m_sEnMon.aRects[nCnt].top, m_sEnMon.aRects[nCnt].right, m_sEnMon.aRects[nCnt].bottom,
+		//	m_sEnMon.aRects[nCnt].right - m_sEnMon.aRects[nCnt].left, m_sEnMon.aRects[nCnt].bottom - m_sEnMon.aRects[nCnt].top,
+		//	m_sEnMon.nDpiAwareness, (LONG)(m_sEnMon.aScales[nCnt].cx * 100), (LONG)(m_sEnMon.aScales[nCnt].cy * 100));
+	}
+
+	return m_sEnMon;
 }
 
 void CLogicalPhysicalCoordinateDisplaySampleDlg::Output(LPRECT pRect, LPRECT pRectStart)
@@ -303,8 +395,8 @@ void CLogicalPhysicalCoordinateDisplaySampleDlg::Output(LPRECT pRect, LPRECT pRe
 	GetCursorPos(&curPosWithL2P);
 	::LogicalToPhysicalPointForPerMonitorDPI(hwnd, &curPosWithL2P);
 
-	POINT physicalCurPos;
-	GetPhysicalCursorPos(&physicalCurPos);
+	POINT curPosEx;
+	GetCursorPosEx(hwnd, &curPosEx);
 
 	RECT pRectWithL2P = *pRect;
 	::LogicalToPhysicalPointForPerMonitorDPI(hwnd, (LPPOINT)&pRectWithL2P);
@@ -320,15 +412,16 @@ void CLogicalPhysicalCoordinateDisplaySampleDlg::Output(LPRECT pRect, LPRECT pRe
 
 	this->strEdit1 = L"";
 	CString strTemp;
-	strTemp.Format(L"Desktop\t\t[%04d, %04d, %04d, %04d (%04d, %04d)]\r\nMDT_RAW_DPI\t[%04d, %04d]\r\nMDT_EFFECTIVE_DPI[%04d, %04d (%03d%%)]\r\nGetCursorPos\t[%04d, %04d] ->L2P[%04d, %04d]\r\nGetPhysicalCursorPos[%04d, %04d]\r\n",
+	strTemp.Format(L"Desktop\t\t[%04d, %04d, %04d, %04d (%04d, %04d)]\r\nMDT_RAW_DPI\t[%04d, %04d]\r\nMDT_EFFECTIVE_DPI[%04d, %04d (%03d%%)]\r\nGetCursorPos\t[%04d, %04d] ->L2P[%04d, %04d]\r\nGetCursorPosEx\t[%04d, %04d]\r\n",
 		monInfo.rcMonitor.left, monInfo.rcMonitor.top, monInfo.rcMonitor.right, monInfo.rcMonitor.bottom, monInfo.rcMonitor.right - monInfo.rcMonitor.left, monInfo.rcMonitor.bottom - monInfo.rcMonitor.top,
 		rawX, rawY,
 		effX, effY, (int)((double)effX / 96.0 * 100.0),
 		curPos.x, curPos.y,
 		curPosWithL2P.x, curPosWithL2P.y,
-		physicalCurPos.x, physicalCurPos.y
+		curPosEx.x, curPosEx.y
 	);
 	this->strEdit1.Append(strTemp);
+
 	strTemp.Format(L"OnMovingArg\t[%04d, %04d, %04d, %04d (%04d - %04d)]\r\n->L2P\t\t[%04d, %04d, %04d, %04d (%04d - %04d)]\r\nDwmGetWindowA...\t[%04d, %04d, %04d, %04d (%04d - %04d)]\r\n->P2L\t\t[%04d, %04d, %04d, %04d (%04d - %04d)]\r\n",
 		pRect->left, pRect->top, pRect->right, pRect->bottom, pRect->right - pRect->left, pRect->bottom - pRect->top,
 		pRectWithL2P.left, pRectWithL2P.top, pRectWithL2P.right, pRectWithL2P.bottom, pRectWithL2P.right - pRectWithL2P.left, pRectWithL2P.bottom - pRectWithL2P.top,
@@ -339,15 +432,28 @@ void CLogicalPhysicalCoordinateDisplaySampleDlg::Output(LPRECT pRect, LPRECT pRe
 
 	if (m_lprectThis)
 	{
-		strTemp.Format(L"This\t[%04d, %04d, %04d, %04d (%04d - %04d)]\r\nThisTemp\t[%04d, %04d, %04d, %04d (%04d - %04d)]\r\nDWMOffet\t[%04d, %04d, %04d, %04d]\r\nDwmSize\t[%04d - %04d] Dist[%04d - %04d] scale[%02d - %02d]\r\npRectStart\t[%04d, %04d, %04d, %04d (%04d - %04d)]\r\n",
+		strTemp.Format(L"Start\t[%04d, %04d, %04d, %04d (%04d - %04d)]\r\nEnd\t[%04d, %04d, %04d, %04d (%04d - %04d)]\r\nTemp\t[%04d, %04d, %04d, %04d (%04d - %04d)]\r\n",
+			pRectStart->left, pRectStart->top, pRectStart->right, pRectStart->bottom, pRectStart->right - pRectStart->left, pRectStart->bottom - pRectStart->top,
 			m_lprectThis->left, m_lprectThis->top, m_lprectThis->right, m_lprectThis->bottom, m_lprectThis->right - m_lprectThis->left, m_lprectThis->bottom - m_lprectThis->top,
-			m_rectThisTemp.left, m_rectThisTemp.top, m_rectThisTemp.right, m_rectThisTemp.bottom, m_rectThisTemp.right - m_rectThisTemp.left, m_rectThisTemp.bottom - m_rectThisTemp.top,
+			m_rectThisTemp.left, m_rectThisTemp.top, m_rectThisTemp.right, m_rectThisTemp.bottom, m_rectThisTemp.right - m_rectThisTemp.left, m_rectThisTemp.bottom - m_rectThisTemp.top
+		);
+		this->strEdit1.Append(strTemp);
+
+		strTemp.Format(L"DWMOffet\t[%04d, %04d, %04d, %04d]\r\nDwmSize\t[%04d - %04d] Dist[%04d - %04d]\r\nDeskP\t[%04d - %04d] scale[%03d - %03d]\r\n",
 			m_rectDWMOffset.left, m_rectDWMOffset.top, m_rectDWMOffset.right, m_rectDWMOffset.bottom,
 			m_sizeThis.cx, m_sizeThis.cy,
 			m_sizeDistance.cx, m_sizeDistance.cy,
-			(LONG)(m_dsizeScale.cx * 10), (LONG)(m_dsizeScale.cy * 10),
-			pRectStart->left, pRectStart->top, pRectStart->right, pRectStart->bottom, pRectStart->right - pRectStart->left, pRectStart->bottom - pRectStart->top
+			m_sizeDeskOffset.x, m_sizeDeskOffset.y,
+			(LONG)(m_dsizeScale.cx * 100), (LONG)(m_dsizeScale.cy * 100)
 		);
+		this->strEdit1.Append(strTemp);
+	}
+
+	for (int nCnt = 0; nCnt < m_sEnMon.nHmonCnt; ++nCnt) {
+		strTemp.Format(L"EnumDT[%04d,%04d,%04d,%04d(%04d,%04d)(%d):%03d,%03d]\r\n",
+			m_sEnMon.aRects[nCnt].left, m_sEnMon.aRects[nCnt].top, m_sEnMon.aRects[nCnt].right, m_sEnMon.aRects[nCnt].bottom,
+			m_sEnMon.aRects[nCnt].right - m_sEnMon.aRects[nCnt].left, m_sEnMon.aRects[nCnt].bottom - m_sEnMon.aRects[nCnt].top,
+			m_sEnMon.nDpiAwareness, (LONG)(m_sEnMon.aScales[nCnt].cx * 100), (LONG)(m_sEnMon.aScales[nCnt].cy * 100));
 		this->strEdit1.Append(strTemp);
 	}
 

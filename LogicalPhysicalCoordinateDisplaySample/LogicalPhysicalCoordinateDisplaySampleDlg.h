@@ -10,6 +10,15 @@ typedef struct DSIZE
 	double cy;
 }DSIZE, *LPDSIZE;
 
+#define MAX_HMON		25					/// モニター列挙最大数
+typedef struct ENUMHMON {
+	HMONITOR	aHmon[MAX_HMON];			/// モニターハンドル配列
+	DSIZE		aScales[MAX_HMON];			/// DPI scale
+	RECT		aRects[MAX_HMON];
+	int			nDpiAwareness;				/// DPI awareness (GetProcessDpiAwareness)
+	int			nHmonCnt;					/// モニターハンドル配列に格納された数
+}ENUMHMON, *LPENUMHMON;
+
 // CLogicalPhysicalCoordinateDisplaySampleDlg ダイアログ
 class CLogicalPhysicalCoordinateDisplaySampleDlg : public CDialogEx
 {
@@ -35,14 +44,20 @@ private:
 	SIZE m_sizeDistance;
 	POINT m_sizeDeskOffset;
 	DSIZE m_dsizeScale;
+	ENUMHMON m_sEnMon;
 	void LogicalToPhysicalPointForPerMonitorDPI(LPPOINT lppoint);
 	void PhysicalToLogicalPointForPerMonitorDPI(LPPOINT lppoint);
+	BOOL IsPerMonitorDPI();
+	void GetCursorPosEx(HWND hwnd, LPPOINT lpPoint);
+	void GetDesktopPosFromWindow(HWND hwnd, LPPOINT lpPoint);
 	void CalcDWMOffset(HWND hwnd);
 	void InitMove(HWND hwnd);
 	void PreMove(HWND hwnd, LPRECT lprectThis);
 	void PreSize(HWND hwnd, LPRECT lprectThis, UINT nSide);
 	void BeginDWMOffset(HWND hwnd, LPRECT lprectThis);
 	void EndDWMOffset(HWND hwnd, LPRECT lprectThis);
+	static BOOL CALLBACK EnumMonitorProc(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lpsrMonitor, LPARAM lParam);
+	ENUMHMON GetValue(BOOL bRefresh = false);
 	void Output(LPRECT pRect, LPRECT pRectStart);
 
 protected:

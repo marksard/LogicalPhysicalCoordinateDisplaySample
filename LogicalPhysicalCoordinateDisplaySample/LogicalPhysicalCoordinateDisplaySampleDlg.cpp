@@ -178,10 +178,10 @@ void CLogicalPhysicalCoordinateDisplaySampleDlg::PhysicalToLogicalPointForPerMon
 
 BOOL CLogicalPhysicalCoordinateDisplaySampleDlg::IsPerMonitorDPI()
 {
-	PROCESS_DPI_AWARENESS dpi;
-	GetProcessDpiAwareness(NULL, &dpi);
-	return dpi == PROCESS_PER_MONITOR_DPI_AWARE;
-	//return IsProcessDPIAware();
+	//PROCESS_DPI_AWARENESS dpi;
+	//GetProcessDpiAwareness(NULL, &dpi);
+	//return dpi == PROCESS_PER_MONITOR_DPI_AWARE;
+	return IsProcessDPIAware();
 }
 
 static SIZE s_DeskDist;
@@ -190,16 +190,16 @@ void CLogicalPhysicalCoordinateDisplaySampleDlg::GetCursorPosEx(HWND hwnd, LPPOI
 	GetCursorPos(lpPoint);
 	if (IsPerMonitorDPI() == FALSE)
 	{
-		HMONITOR hmon = MonitorFromWindow(::GetAncestor(hwnd, GA_ROOT), MONITOR_DEFAULTTONEAREST);
-		MONITORINFO monInfo;
-		monInfo.cbSize = sizeof(MONITORINFO);
-		GetMonitorInfo(hmon, &monInfo);
-		POINT posDesk;
-		GetDesktopPosFromWindow(hwnd, &posDesk);
-		lpPoint->x = lpPoint->x - monInfo.rcMonitor.left + posDesk.x;
-		lpPoint->y = lpPoint->y - monInfo.rcMonitor.top + posDesk.y;
-		s_DeskDist.cx = posDesk.x - monInfo.rcMonitor.left;
-		s_DeskDist.cy = posDesk.y - monInfo.rcMonitor.top;
+		//HMONITOR hmon = MonitorFromWindow(::GetAncestor(hwnd, GA_ROOT), MONITOR_DEFAULTTONEAREST);
+		//MONITORINFO monInfo;
+		//monInfo.cbSize = sizeof(MONITORINFO);
+		//GetMonitorInfo(hmon, &monInfo);
+		//POINT posDesk;
+		//GetDesktopPosFromWindow(hwnd, &posDesk);
+		//lpPoint->x = lpPoint->x - monInfo.rcMonitor.left + posDesk.x;
+		//lpPoint->y = lpPoint->y - monInfo.rcMonitor.top + posDesk.y;
+		//s_DeskDist.cx = posDesk.x - monInfo.rcMonitor.left;
+		//s_DeskDist.cy = posDesk.y - monInfo.rcMonitor.top;
 		this->LogicalToPhysicalPointForPerMonitorDPI(lpPoint);
 	}
 }
@@ -208,15 +208,20 @@ void CLogicalPhysicalCoordinateDisplaySampleDlg::GetDesktopPosFromWindow(HWND hw
 {
 	// スケールからの論理・物理座標計算に必要な自分がいるモニターの左上座標を取得
 	HMONITOR hmon = MonitorFromWindow(::GetAncestor(hwnd, GA_ROOT), MONITOR_DEFAULTTONEAREST);
-	for (int nCnt = 0; nCnt < m_sEnMon.nHmonCnt; ++nCnt)
-	{
-		if (hmon == m_sEnMon.aHmon[nCnt])
-		{
-			lpPoint->x = m_sEnMon.aRects[nCnt].left;
-			lpPoint->y = m_sEnMon.aRects[nCnt].top;
-			break;
-		}
-	}
+	//for (int nCnt = 0; nCnt < m_sEnMon.nHmonCnt; ++nCnt)
+	//{
+	//	if (hmon == m_sEnMon.aHmon[nCnt])
+	//	{
+	//		lpPoint->x = m_sEnMon.aRects[nCnt].left;
+	//		lpPoint->y = m_sEnMon.aRects[nCnt].top;
+	//		break;
+	//	}
+	//}
+	MONITORINFO monInfo;
+	monInfo.cbSize = sizeof(MONITORINFO);
+	GetMonitorInfo(hmon, &monInfo);
+	lpPoint->x = monInfo.rcMonitor.left;
+	lpPoint->y = monInfo.rcMonitor.top;
 }
 
 void CLogicalPhysicalCoordinateDisplaySampleDlg::CalcDWMOffset(HWND hwnd)
@@ -317,10 +322,10 @@ void CLogicalPhysicalCoordinateDisplaySampleDlg::EndDWMOffset(HWND hwnd, LPRECT 
 		this->PhysicalToLogicalPointForPerMonitorDPI((LPPOINT)lprectThis + 1);
 	}
 
-	lprectThis->left -= s_DeskDist.cx;
-	lprectThis->top -= s_DeskDist.cy;
-	lprectThis->right -= s_DeskDist.cx;
-	lprectThis->bottom -= s_DeskDist.cy;
+	//lprectThis->left -= s_DeskDist.cx;
+	//lprectThis->top -= s_DeskDist.cy;
+	//lprectThis->right -= s_DeskDist.cx;
+	//lprectThis->bottom -= s_DeskDist.cy;
 }
 
 BOOL CALLBACK CLogicalPhysicalCoordinateDisplaySampleDlg::EnumMonitorProc(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lpsrMonitor, LPARAM lParam)
@@ -364,13 +369,13 @@ ENUMHMON CLogicalPhysicalCoordinateDisplaySampleDlg::GetValue(BOOL bRefresh)
 
 	m_sEnMon.nHmonCnt = 0;
 	EnumDisplayMonitors(NULL, NULL, EnumMonitorProc, (LPARAM)&m_sEnMon);
-	for (int nCnt = 0; nCnt < m_sEnMon.nHmonCnt; ++nCnt) {
-		//LOG_NOTE(L"[%03d] [Mon: %04d, %04d - %04d, %04d(%04d, %04d)] [DPI(%d): %03d, %03d]\r\n",
-		//	nCnt + 1, 
-		//	m_sEnMon.aRects[nCnt].left, m_sEnMon.aRects[nCnt].top, m_sEnMon.aRects[nCnt].right, m_sEnMon.aRects[nCnt].bottom,
-		//	m_sEnMon.aRects[nCnt].right - m_sEnMon.aRects[nCnt].left, m_sEnMon.aRects[nCnt].bottom - m_sEnMon.aRects[nCnt].top,
-		//	m_sEnMon.nDpiAwareness, (LONG)(m_sEnMon.aScales[nCnt].cx * 100), (LONG)(m_sEnMon.aScales[nCnt].cy * 100));
-	}
+	//for (int nCnt = 0; nCnt < m_sEnMon.nHmonCnt; ++nCnt) {
+	//	LOG_NOTE(L"[%03d] [Mon: %04d, %04d - %04d, %04d(%04d, %04d)] [DPI(%d): %03d, %03d]\r\n",
+	//		nCnt + 1, 
+	//		m_sEnMon.aRects[nCnt].left, m_sEnMon.aRects[nCnt].top, m_sEnMon.aRects[nCnt].right, m_sEnMon.aRects[nCnt].bottom,
+	//		m_sEnMon.aRects[nCnt].right - m_sEnMon.aRects[nCnt].left, m_sEnMon.aRects[nCnt].bottom - m_sEnMon.aRects[nCnt].top,
+	//		m_sEnMon.nDpiAwareness, (LONG)(m_sEnMon.aScales[nCnt].cx * 100), (LONG)(m_sEnMon.aScales[nCnt].cy * 100));
+	//}
 
 	return m_sEnMon;
 }

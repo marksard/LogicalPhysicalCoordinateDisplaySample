@@ -51,18 +51,15 @@ BOOL CLogicalPhysicalCoordinateDisplaySampleDlg::OnInitDialog()
 	SetIcon(m_hIcon, FALSE);		// 小さいアイコンの設定
 
 	// TODO: 初期化をここに追加します。
-	if (IsProcessDPIAware())
+	PROCESS_DPI_AWARENESS dpi;
+	GetProcessDpiAwareness(GetCurrentProcess(), &dpi);
+	if (dpi == PROCESS_PER_MONITOR_DPI_AWARE)
 	{
-		PROCESS_DPI_AWARENESS dpi;
-		GetProcessDpiAwareness(GetCurrentProcess(), &dpi);
-		if (dpi == PROCESS_PER_MONITOR_DPI_AWARE)
-		{
-			SetWindowTextW(c_strAwareM);
-		}
-		else
-		{
-			SetWindowTextW(c_strAware);
-		}
+		SetWindowTextW(c_strAwareM);
+	}
+	else if (dpi == PROCESS_SYSTEM_DPI_AWARE)
+	{
+		SetWindowTextW(c_strAware);
 	}
 	else
 	{

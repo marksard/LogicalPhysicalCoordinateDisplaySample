@@ -190,16 +190,16 @@ void CLogicalPhysicalCoordinateDisplaySampleDlg::GetCursorPosEx(HWND hwnd, LPPOI
 	GetCursorPos(lpPoint);
 	if (IsPerMonitorDPI() == FALSE)
 	{
-		//HMONITOR hmon = MonitorFromWindow(::GetAncestor(hwnd, GA_ROOT), MONITOR_DEFAULTTONEAREST);
-		//MONITORINFO monInfo;
-		//monInfo.cbSize = sizeof(MONITORINFO);
-		//GetMonitorInfo(hmon, &monInfo);
-		//POINT posDesk;
-		//GetDesktopPosFromWindow(hwnd, &posDesk);
-		//lpPoint->x = lpPoint->x - monInfo.rcMonitor.left + posDesk.x;
-		//lpPoint->y = lpPoint->y - monInfo.rcMonitor.top + posDesk.y;
-		//s_DeskDist.cx = posDesk.x - monInfo.rcMonitor.left;
-		//s_DeskDist.cy = posDesk.y - monInfo.rcMonitor.top;
+		HMONITOR hmon = MonitorFromWindow(::GetAncestor(hwnd, GA_ROOT), MONITOR_DEFAULTTONEAREST);
+		MONITORINFO monInfo;
+		monInfo.cbSize = sizeof(MONITORINFO);
+		GetMonitorInfo(hmon, &monInfo);
+		POINT posDesk;
+		GetDesktopPosFromWindow(hwnd, &posDesk);
+		lpPoint->x = lpPoint->x - monInfo.rcMonitor.left + posDesk.x;
+		lpPoint->y = lpPoint->y - monInfo.rcMonitor.top + posDesk.y;
+		s_DeskDist.cx = posDesk.x - monInfo.rcMonitor.left;
+		s_DeskDist.cy = posDesk.y - monInfo.rcMonitor.top;
 		this->LogicalToPhysicalPointForPerMonitorDPI(lpPoint);
 	}
 }
@@ -208,20 +208,20 @@ void CLogicalPhysicalCoordinateDisplaySampleDlg::GetDesktopPosFromWindow(HWND hw
 {
 	// スケールからの論理・物理座標計算に必要な自分がいるモニターの左上座標を取得
 	HMONITOR hmon = MonitorFromWindow(::GetAncestor(hwnd, GA_ROOT), MONITOR_DEFAULTTONEAREST);
-	//for (int nCnt = 0; nCnt < m_sEnMon.nHmonCnt; ++nCnt)
-	//{
-	//	if (hmon == m_sEnMon.aHmon[nCnt])
-	//	{
-	//		lpPoint->x = m_sEnMon.aRects[nCnt].left;
-	//		lpPoint->y = m_sEnMon.aRects[nCnt].top;
-	//		break;
-	//	}
-	//}
-	MONITORINFO monInfo;
-	monInfo.cbSize = sizeof(MONITORINFO);
-	GetMonitorInfo(hmon, &monInfo);
-	lpPoint->x = monInfo.rcMonitor.left;
-	lpPoint->y = monInfo.rcMonitor.top;
+	for (int nCnt = 0; nCnt < m_sEnMon.nHmonCnt; ++nCnt)
+	{
+		if (hmon == m_sEnMon.aHmon[nCnt])
+		{
+			lpPoint->x = m_sEnMon.aRects[nCnt].left;
+			lpPoint->y = m_sEnMon.aRects[nCnt].top;
+			break;
+		}
+	}
+	//MONITORINFO monInfo;
+	//monInfo.cbSize = sizeof(MONITORINFO);
+	//GetMonitorInfo(hmon, &monInfo);
+	//lpPoint->x = monInfo.rcMonitor.left;
+	//lpPoint->y = monInfo.rcMonitor.top;
 }
 
 void CLogicalPhysicalCoordinateDisplaySampleDlg::CalcDWMOffset(HWND hwnd)
@@ -322,10 +322,10 @@ void CLogicalPhysicalCoordinateDisplaySampleDlg::EndDWMOffset(HWND hwnd, LPRECT 
 		this->PhysicalToLogicalPointForPerMonitorDPI((LPPOINT)lprectThis + 1);
 	}
 
-	//lprectThis->left -= s_DeskDist.cx;
-	//lprectThis->top -= s_DeskDist.cy;
-	//lprectThis->right -= s_DeskDist.cx;
-	//lprectThis->bottom -= s_DeskDist.cy;
+	lprectThis->left -= s_DeskDist.cx;
+	lprectThis->top -= s_DeskDist.cy;
+	lprectThis->right -= s_DeskDist.cx;
+	lprectThis->bottom -= s_DeskDist.cy;
 }
 
 BOOL CALLBACK CLogicalPhysicalCoordinateDisplaySampleDlg::EnumMonitorProc(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lpsrMonitor, LPARAM lParam)
@@ -415,10 +415,22 @@ void CLogicalPhysicalCoordinateDisplaySampleDlg::Output(LPRECT pRect, LPRECT pRe
 	::PhysicalToLogicalPointForPerMonitorDPI(hwnd, (LPPOINT)&dwmRectWithP2L);
 	::PhysicalToLogicalPointForPerMonitorDPI(hwnd, (LPPOINT)&dwmRectWithP2L + 1);
 
+	RECT rectVD;
+	SIZE sizeVD;
+	rectVD.left = GetSystemMetrics(SM_XVIRTUALSCREEN);
+	rectVD.top = GetSystemMetrics(SM_YVIRTUALSCREEN);
+	sizeVD.cx = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+	sizeVD.cy = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+	rectVD.right = rectVD.left + sizeVD.cx;
+	rectVD.bottom = rectVD.top + sizeVD.cy;
+	::LogicalToPhysicalPointForPerMonitorDPI(hwnd, (LPPOINT)&rectVD);
+	::LogicalToPhysicalPointForPerMonitorDPI(hwnd, (LPPOINT)&rectVD + 1);
+
 	this->strEdit1 = L"";
 	CString strTemp;
-	strTemp.Format(L"Desktop\t\t[%04d, %04d, %04d, %04d (%04d, %04d)]\r\nMDT_RAW_DPI\t[%04d, %04d]\r\nMDT_EFFECTIVE_DPI[%04d, %04d (%03d%%)]\r\nGetCursorPos\t[%04d, %04d] ->L2P[%04d, %04d]\r\nGetCursorPosEx\t[%04d, %04d]\r\n",
+	strTemp.Format(L"Desktop\t\t[%04d, %04d, %04d, %04d (%04d, %04d)]\r\nVDesktop\t\t[%04d, %04d, %04d, %04d (%04d, %04d)]\r\nMDT_RAW_DPI\t[%04d, %04d]\r\nMDT_EFFECTIVE_DPI[%04d, %04d (%03d%%)]\r\nGetCursorPos\t[%04d, %04d] ->L2P[%04d, %04d]\r\nGetCursorPosEx\t[%04d, %04d]\r\n",
 		monInfo.rcMonitor.left, monInfo.rcMonitor.top, monInfo.rcMonitor.right, monInfo.rcMonitor.bottom, monInfo.rcMonitor.right - monInfo.rcMonitor.left, monInfo.rcMonitor.bottom - monInfo.rcMonitor.top,
+		rectVD.left, rectVD.top, rectVD.right, rectVD.bottom, sizeVD.cx, sizeVD.cy,
 		rawX, rawY,
 		effX, effY, (int)((double)effX / 96.0 * 100.0),
 		curPos.x, curPos.y,
